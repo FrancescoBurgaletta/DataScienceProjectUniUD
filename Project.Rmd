@@ -1,0 +1,444 @@
+---
+title: "Impact of renewable energy sources"
+author: "Burgaletta Francesco"
+date: "August 21, 2023"
+output:
+  beamer_presentation: default
+  html_document: default
+  pdf_document: default
+  ioslides_presentation:
+    css: style.css
+  slidy_presentation: default
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+# cache results
+knitr::opts_chunk$set(cache=TRUE, echo = TRUE, eval = TRUE, message=FALSE, warning = FALSE, fig.align='center')
+```
+
+## Overview
+
+Given the increasing media coverage of renewable energy sources and people's interest in them, one could ask the following questions:
+
+1. How do CO2 emissions relate to the use of renewable energy sources?
+2. Are investments in renewables related to their effective adoption?
+3. Do we make the most of GDP growth to increase investments in renewables?
+4. Does life expectancy change with renewables usage?
+
+## The datasets
+
+The datasets used for this data analysis incorporate the relationship between all the countries grouped by regions, the year and multiple quantities. These quantities are:
+
+1. Energy production from oil, gas, coal, wind, solar, hydroelectric and nuclear.
+2. Economic and financial indicators, in this case GDP and investments in renewables.
+3. Demographic indicators such as population size and life expectancy.
+
+```{r, evaluate = TRUE, echo = FALSE}
+#install.packages("igraph")
+#install.packages("tidyverse")
+#install.packages("dplyr")
+library(igraph)
+library(tibble)
+library(readr)
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+
+wd = getwd()
+
+dataset_oil = paste(wd, "/Oil.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East (EI)" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Entity, Year)
+
+dataset_gas = paste(wd, "/Gas.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East (EI)" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Entity, Year)
+
+dataset_coal = paste(wd, "/Coal.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East (EI)" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Entity, Year)
+
+dataset_wind = paste(wd, "/Wind.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East (EI)" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Entity, Year)
+
+dataset_solar = paste(wd, "/Solar.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East (EI)" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Entity, Year)
+
+dataset_hydroelectric = paste(wd, "/Hydroelectric.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East (EI)" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Entity, Year)
+
+dataset_nuclear = paste(wd, "/Nuclear.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East (EI)" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Entity, Year)
+
+names(dataset_oil)[c(1,3)] = c("Region", "Oil")
+names(dataset_gas)[c(1,3)] = c("Region", "Gas")
+names(dataset_coal)[c(1,3)] = c("Region", "Coal")
+names(dataset_wind)[c(1,3)] = c("Region", "Wind")
+names(dataset_solar)[c(1,3)] = c("Region", "Solar")
+names(dataset_hydroelectric)[c(1,3)] = c("Region", "Hydroelectric")
+names(dataset_nuclear)[c(1,3)] = c("Region", "Nuclear")
+
+
+
+dataset_investments = paste(wd, "/Investments in renewables.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  filter(Category == "Renewables") %>%
+  select(c(3,7,15)) %>%
+  filter(Region == "Africa" | Region == "Asia" | Region == "Europe" | Region == "Middle East" | Region == "North America" | Region == "Oceania" | Region == "South America") %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020)
+
+names(dataset_investments)[3] = "Amount"
+
+dataset_investments = dataset_investments %>%
+  group_by(Region, Year) %>%
+  summarise(Amount = 1000000 * sum(Amount)) %>%
+  arrange(Region, Year)
+
+
+
+dataset_life = paste(wd, "/Life expectancy.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4)) %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020)
+
+names(dataset_life)[3] = "LifeExpectancy"
+dataset_life$Entity[dataset_life$Entity == "Latin America and the Caribbean"] = "South America"
+dataset_life$Entity[dataset_life$Entity == "Northern America"] = "North America"
+
+dataset_life_middle_east = dataset_life %>%
+  filter(Entity == "Saudi Arabia" |
+           Entity == "Iran" |
+           Entity == "Egypt" |
+           Entity == "Turkey" |
+           Entity == "Syria" |
+           Entity == "Iraq" |
+           Entity == "Jordan" |
+           Entity == "Cyprus" |
+           Entity == "Turkey" |
+           Entity == "United Arab Emirates" |
+           Entity == "Oman" |
+           Entity == "Yemen" |
+           Entity == "Kuwait" |
+           Entity == "Bahrain" |
+           Entity == "Qatar" |
+           Entity == "Lebanon" |
+           Entity == "Palestine" |
+           Entity == "Israel") %>%
+  group_by(Year) %>%
+  summarise(Entity = "Middle East", LifeExpectancy = sum(LifeExpectancy) / 18)
+
+dataset_life = rbind(dataset_life, dataset_life_middle_east)  %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East" | Entity == "North America" | Entity == "Oceania" | Entity == "South America") %>%
+  arrange(Entity, Year)
+
+names(dataset_life)[1] = "Region"
+
+
+
+dataset_emissions = paste(wd, "/CO2 emissions.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4))
+
+names(dataset_emissions)[c(1,3)] = c("Region", "CO2Emissions")
+dataset_emissions$Region[dataset_emissions$Region == "Middle East (GCP)"] = "Middle East"
+
+dataset_emissions = dataset_emissions %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  filter(Region == "Africa" | Region == "Asia" | Region == "Europe" | Region == "Middle East" | Region == "North America" |
+           Region == "Oceania" | Region == "South America" | Region == "World") %>%
+  arrange(Region, Year)
+
+
+
+dataset_population = paste(wd, "/Population.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
+  select(c(1,3,4))
+
+dataset_population_middle_east = dataset_population %>%
+  filter(Entity == "Saudi Arabia" |
+           Entity == "Iran" |
+           Entity == "Egypt" |
+           Entity == "Turkey" |
+           Entity == "Syria" |
+           Entity == "Iraq" |
+           Entity == "Jordan" |
+           Entity == "Cyprus" |
+           Entity == "Turkey" |
+           Entity == "United Arab Emirates" |
+           Entity == "Oman" |
+           Entity == "Yemen" |
+           Entity == "Kuwait" |
+           Entity == "Bahrain" |
+           Entity == "Qatar" |
+           Entity == "Lebanon" |
+           Entity == "Palestine" |
+           Entity == "Israel") %>%
+  group_by(Year) %>%
+  summarise(Entity = "Middle East", Population = sum(Population))
+
+dataset_population = rbind(dataset_population, dataset_population_middle_east)  %>%
+  filter(Entity == "Africa" | Entity == "Asia" | Entity == "Europe" | Entity == "Middle East" |
+           Entity == "North America" | Entity == "Oceania" | Entity == "South America" | Entity == "World")
+
+names(dataset_population)[1] = "Region"
+
+dataset_population = dataset_population %>%
+  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  arrange(Region, Year)
+
+
+
+dataset_gdp = paste(wd, "/GDP.csv", sep = "") %>% read_csv() %>% as_tibble()
+
+names(dataset_gdp)[1] = "Region"
+
+dataset_gdp = dataset_gdp %>%
+  filter(Region == "Africa (Region)" | Region == "Asia and Pacific" | Region == "Australia and New Zealand" | Region == "Europe" |
+           Region == "Middle East (Region)" | Region == "North America" | Region == "South America" | Region == "World") %>%
+  pivot_longer(paste(1980:2028), names_to = "Year", values_to = "GDPBillions") %>%
+  transform(Year = as.integer(Year), GDPBillions = as.double(GDPBillions)) %>% filter(Year >= 2000 & Year <= 2020) %>%
+  mutate(GDP = 1000000000 * GDPBillions) %>%
+  select(Region, Year, GDP) %>%
+  arrange(Region, Year)
+
+dataset_gdp$Region[dataset_gdp$Region == "Africa (Region)"] = "Africa"
+dataset_gdp$Region[dataset_gdp$Region == "Asia and Pacific"] = "Asia"
+dataset_gdp$Region[dataset_gdp$Region == "Australia and New Zealand"] = "Oceania"
+dataset_gdp$Region[dataset_gdp$Region == "Middle East (Region)"] = "Middle East"
+
+dataset_gdp = dataset_gdp %>%
+  arrange(Region, Year)
+
+
+
+dataset_energy = full_join(dataset_oil, dataset_gas, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_coal, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_wind, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_solar, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_hydroelectric, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_nuclear, by = c("Region", "Year")) %>%
+  replace(is.na(.), 0) %>%
+  mutate(FossilFuels = Oil + Gas + Coal, Renewables = Wind + Solar + Hydroelectric + Nuclear) %>%
+  select(Region, Year, FossilFuels, Renewables)
+
+dataset_energy$Region[dataset_energy$Region == "Middle East (EI)"] = "Middle East"
+```
+
+## CO2 emissions
+
+CO2 emissions are undoubtedly one of the most concerning drawbacks of fossil fuels.
+Renewables promise to reduce the impact of all greenhouse gases, CO2 included.
+
+```{r, evaluate = TRUE, echo = FALSE}
+#install.packages("patchwork")
+#install.packages("ggrepel")
+library(ggplot2)
+library(ggrepel)
+library(patchwork)
+
+mytheme = list(
+    theme_classic() +
+        theme(panel.background = element_blank(),
+              strip.background = element_rect(colour=NA, fill=NA),
+              panel.border = element_rect(fill = NA, color = "black"),
+              strip.text = element_text(face="bold", size = 9),
+              axis.text=element_text(face="bold"),
+              axis.title = element_text(face="bold"),
+              plot.title = element_text(face = "bold", hjust = 0.5,size = 13),
+              panel.grid.major = element_line(color = 'lightgrey', size = 0.25),
+              panel.grid.minor = element_line(color = 'lightgrey', size = 0.25))
+)
+
+dataset_emissions_world = dataset_emissions %>%
+  filter(Region == "World") %>%
+  select(Year, CO2Emissions)
+
+dataset_energy_world = dataset_energy %>%
+  filter(Region == "World") %>%
+  pivot_longer(c("FossilFuels", "Renewables"), names_to = "Type", values_to = "PowerOutput") %>%
+  select(Year, Type, PowerOutput) %>%
+  arrange(Type, Year)
+
+energy_colors = c(rep("FossilFuels", 21), rep("Renewables", 21))
+
+plot_emissions = ggplot() +
+  geom_line(data = dataset_emissions_world, mapping = aes(x = Year, y = CO2Emissions), color = "#000000", size = 1.5) +
+  labs(title="Global CO2 emissions\nin tons from 2000 to 2020", x ="Year", y = "CO2 Emissions (T)") +
+  mytheme
+
+plot_energy = ggplot() +
+  geom_line(data = dataset_energy_world, mapping = aes(x = Year, y = PowerOutput, group = Type, color = energy_colors), size = 1.5) +
+  labs(title="Fossil fuels and renewables'\nenergy output from 2000 to 2020", x ="Year", y = "Energy output (KWh)") +
+  scale_color_manual(name = "Energy source", values = c("#000000", "#80FF80")) +
+  mytheme + theme(legend.position = "right")
+
+plot_emissions + plot_energy
+```
+ 
+## CO2 emissions
+
+CO2 emissions have increased all around the world. This is because the use of fossil fuels has increased as well, and the plot shows this relationship with excellent clarity.
+At the same time, there was a slight increase in renewables' adoption from 2000 to 2020, but they are far from reaching widespread use. 
+
+One possibility is that CO2 emissions could stop increasing or even decrease in the following years if the renewables' adoption is accelerated. This, however, requires all the countries in the world to start using renewable energy sources.
+
+Furthermore, both the most and least developed countries showed very modest involvement in building more power stations based on renewable energy sources.
+
+## Investments
+
+After having assessed the very limited promotion of renewable energy sources, an analysis on the investments in the field will help understand how economic resources are actually used.
+
+```{r, evaluate = TRUE, echo = FALSE}
+dataset_efficiency = inner_join(dataset_investments, dataset_energy, by = c("Region", "Year")) %>%
+  replace(is.na(.), 0) %>%
+  group_by(Region, Year) %>%
+  summarise(Amount = sum(Amount), Renewables = sum(Renewables)) %>%
+  mutate(Efficiency = 1000000000 * Renewables / Amount) %>%
+  select(Region, Year, Efficiency) %>%
+  arrange(Region, Year)
+
+regions_years = dataset_efficiency %>%
+  group_by(Region) %>%
+  summarise(N = n()) %>%
+  select(N)
+
+colors = c(rep("#E6FF80", regions_years$N[1]), rep("#C3D96C", regions_years$N[2]),
+        rep("#A1B359", regions_years$N[3]), rep("#7E8C46", regions_years$N[4]),
+        rep("#5C6633", regions_years$N[5]), rep("#394020", regions_years$N[6]),
+        rep("#171A0D", regions_years$N[7]))
+
+plot_efficiency = ggplot() +
+  geom_bar(data = dataset_efficiency, mapping = aes(x = Region, y = Efficiency, group = Year), position="dodge", stat="identity", fill = colors) +
+  scale_y_continuous(trans='log10') +
+  labs(title="Ratio between the renewable energy output in Wh and the amount\nof investments in renewables in USD in logarithmic scale from 2000 to 2020", x ="Region", y = "Ratio between the renewable energy output\nand investments (Wh/USD)") +
+  mytheme
+
+plot_efficiency
+```
+
+## Investments
+
+Every region displays an initial decrease in efficiency starting in 2000 and then, in recent years, a subsequent increase, which is much more marked for some regions than for others.
+
+Keeping in mind the almost stale usage of renewable energy sources at national level, the bigger picture is different. This trend is explained by the fact that the renewables' usage started from a modest value and increased notably only in the last few years thanks to the contribution of governments, while at the same time the investments initially were extremely low and increased, but at a lower pace with respect to the adoption.
+
+Moreover, it should not be forgotten that this efficiency score is a relative value, and so, even if renewables' usage has grown, population, industries and fossil fuels' usage have grown as well.
+
+## Taking advantage of GDP growth
+
+GDP should also be taken into account when analyzing the amount of investments in any field, as it roughly represents the disposable portion of resources.
+
+```{r, evaluate = TRUE, echo = FALSE}
+dataset_gdp_per_capita = inner_join(dataset_gdp, dataset_population, by = c("Region", "Year")) %>%
+  filter(Region != "World") %>%
+  mutate(GDPPerCapita = GDP / Population) %>%
+  select(Region, Year, GDPPerCapita)
+
+dataset_percentage = inner_join(dataset_gdp, dataset_investments, by = c("Region", "Year")) %>%
+  filter(Region != "World") %>%
+  mutate(InvestmentsPercentage = 100 * Amount / GDP) %>%
+  select(Region, Year, InvestmentsPercentage)
+
+regions = c(rep("Africa", 21), rep("Asia", 21),
+        rep("Europe", 21), rep("Middle East", 21),
+        rep("North America", 21), rep("Oceania", 21),
+        rep("South America", 21))
+
+regions2 = c(rep("Africa", 21), rep("Asia", 21),
+        rep("Europe", 21), rep("Middle East", 19),
+        rep("North America", 21), rep("Oceania", 21),
+        rep("South America", 21))
+
+colors = c("#BD80FF", "#A16CD9", "#8459B3", "#68468C", "#4C3366", "#2F2040",  "#130D1A")
+
+plot_gdp = ggplot() +
+  geom_line(data = dataset_gdp_per_capita, aes(x=Year, y=GDPPerCapita, color = regions, group = Region), size = 0.75) +
+  geom_point(data = dataset_gdp_per_capita, aes(x=Year, y=GDPPerCapita, color = regions, group = Region)) +
+  labs(title="GDP per capita growth in\nUSD from 2000 to 2020", x ="Year", y = "GDP per capita (USD)") +
+  scale_color_manual(values = colors) +
+  mytheme + theme(legend.position = "none")
+
+plot_investments = ggplot() +
+  geom_line(data = dataset_percentage, aes(x=Year, y=InvestmentsPercentage, color = regions2, group = Region), size = 0.75) +
+  geom_point(data = dataset_percentage, aes(x=Year, y=InvestmentsPercentage, color = regions2, group = Region)) +
+  labs(title="Investments in renewables as a\npercentage of GDP from 2000 to 2020", x ="Year", y = "Percentage of renewables (%)") +
+  scale_color_manual(name = "Region", values = colors) +
+  mytheme + theme(legend.position = "right")
+
+plot_gdp + plot_investments
+```
+
+## Taking advantage of GDP growth
+
+Despite the GDP globally kept growing in the last decades, albeit slowing down, it is not until lately that we see an important increase in investments in renewables, though these investments abruptly declined in recent years after a period of firm funding.
+
+It is to note that the amounts shown here are due to national governments acting as donors. Given this fact, one expects a huge flow of money into renewables according to the increase of GDP per capita and thus the countries' richness. But in reality the contributions are orders of magnitude smaller than what could possibly be invested. This situation is further aggravated by the fact that investments fell back down.
+
+In addition, it is remarkable how the increase in GDP per capita follows the use of fossil fuels' pattern seen previously. This trend could be converted in favour of renewables in the future.
+
+## Renewables and life expectancy
+
+Renewables' promise not to poison the environment should have an impact on life expectancy when the ratio between fossil fuels and renewables grows favouring the latter.
+
+```{r, evaluate = TRUE, echo = FALSE}
+dataset_percentage = dataset_energy %>%
+  mutate(Percentage = 100 * Renewables / (Renewables + FossilFuels)) %>%
+  select(Region, Year, Percentage) %>%
+  filter(Region != "World")
+
+colors = c("#FF9D80", "#D9866C", "#B36E59", "#8C5646", "#663F33", "#402720",  "#1A100D")
+
+plot_percentages1 = ggplot() +
+  geom_bar(data = dataset_percentage, aes(x = Region, y = Percentage, fill = regions, group = Year), stat = "identity", position = "dodge") +
+  labs(title="Renewables' percentage on\nall energy sources\nfrom 2000 to 2020", x ="Region", y = "Percentage of renewables (%)") +
+  scale_fill_manual(values = colors) +
+  mytheme + theme(legend.position="none") +
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+
+plot_percentages2 = ggplot() +
+  geom_bar(data = dataset_life, aes(x = Region, y = LifeExpectancy, fill = regions, group = Year), stat = "identity", position = "dodge") +
+  labs(title="Life expectancy in years\nfrom 2000 to 2020", x ="Region", y = "Life expectancy (years)") +
+  scale_fill_manual(name = "Region", values = colors) +
+  mytheme + theme(legend.position = "right") +
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+
+plot_percentages1 + plot_percentages2
+```
+
+## Renewables and life expectancy
+
+Percentage of renewables over all emergy sources has overall increased by small amounts given the 20 year period.
+
+Life expectancy has also increased in the same period, but the factors that should be taken into account to address the quality increase of life conditions are many more than just the cleanliness of the energy sources. Simultaneously the decrease in fossil fuels usage means less pollution, but their use has been shown to have increased as well, even if to slightliy lower percentage of the total.
+
+## Conclusions
+
+In conclusion:
+
+1. We are still too dependent on fossil fuels and CO2 emissions won't decrease in the short term.
+2. Efficiency in investing in renewables is increasing but at a very slow pace.
+3. Our economy still depends on fossil fuels and the investments in renewables are decreasing compared to our richness.
+4. Renewables' use is too low at this time to link it to the increase of life expectancy.
