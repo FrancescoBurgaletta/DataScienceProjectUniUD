@@ -1,5 +1,5 @@
 ---
-title: "Impact of renewable energy sources"
+title: "Integration of renewable energy sources"
 author: "Burgaletta Francesco"
 date: "August 21, 2023"
 output:
@@ -20,19 +20,20 @@ knitr::opts_chunk$set(cache=TRUE, echo = TRUE, eval = TRUE, message=FALSE, warni
 
 ## Overview
 
-Given the increasing media coverage of renewable energy sources and people's interest in them, one could ask the following questions:
+Renewables are a field of interest to an increasing amount of public entities, and as such it poses the following questions:
 
-1. How does the use of fossil fuels relate to life expectancy?
+1. How should renewables be bond with the industry not to undermine quality of life?
 2. How are investments in renewables related to their effective adoption and to the available resources?
-3. What are the growth prospects of renewables' usage?
+3. What are the growth prospects of renewables with respect to fossil fuels?
 
 ## The datasets
 
-The datasets used for this data analysis incorporate the relationship between all the countries grouped by regions, the year and multiple quantities. These quantities are:
+The datasets used to answer these questions incorporate the relationship between all the countries, the year (this analysis will focus on the period between 2000 and 2020) and multiple quantities. These quantities are:
 
 1. Energy production from oil, gas, coal, wind, solar, hydroelectric and nuclear.
-2. Economic and financial indicators, in this case GDP and investments in renewables.
+2. Economic and financial indicators, in this case GDP and public investments in renewables.
 3. Demographic indicators such as population size and life expectancy.
+4. CO2 emissions.
 
 ```{r, evaluate = TRUE, echo = FALSE}
 #install.packages("igraph")
@@ -44,51 +45,45 @@ library(readr)
 library(tidyr)
 library(tidyverse)
 library(dplyr)
+#install.packages("patchwork")
+#install.packages("ggrepel")
+library(ggplot2)
+library(ggrepel)
+library(patchwork)
 
 wd = getwd()
 
-dataset_oil = paste(wd, "/Oil.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(c(1,3,4)) %>%
-  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
-  arrange(Entity, Year)
+read_energy_data = function(path, name) {
+  dataset = paste(wd, path, sep = "") %>%
+    read_csv() %>%
+    as_tibble() %>%
+    select(c(1,3,4)) %>%
+    transform(Year = as.integer(Year)) %>%
+    filter(Year >= 2000 & Year <= 2020)
+  
+  names(dataset)[c(1,3)] = c("Region", name)
+  
+  dataset
+}
 
-dataset_gas = paste(wd, "/Gas.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(c(1,3,4)) %>%
-  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
-  arrange(Entity, Year)
+dataset_oil = read_energy_data("/Oil.csv", "Oil")
+dataset_gas = read_energy_data("/Gas.csv", "Gas")
+dataset_coal = read_energy_data("/Coal.csv", "Coal")
+dataset_wind = read_energy_data("/Wind.csv", "Wind")
+dataset_solar = read_energy_data("/Solar.csv", "Solar")
+dataset_hydroelectric = read_energy_data("/Hydroelectric.csv", "Hydroelectric")
+dataset_nuclear = read_energy_data("/Nuclear.csv", "Nuclear")
 
-dataset_coal = paste(wd, "/Coal.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(c(1,3,4)) %>%
-  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
-  arrange(Entity, Year)
-
-dataset_wind = paste(wd, "/Wind.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(c(1,3,4)) %>%
-  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
-  arrange(Entity, Year)
-
-dataset_solar = paste(wd, "/Solar.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(c(1,3,4)) %>%
-  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
-  arrange(Entity, Year)
-
-dataset_hydroelectric = paste(wd, "/Hydroelectric.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(c(1,3,4)) %>%
-  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
-  arrange(Entity, Year)
-
-dataset_nuclear = paste(wd, "/Nuclear.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(c(1,3,4)) %>%
-  transform(Year = as.integer(Year)) %>% filter(Year >= 2000 & Year <= 2020) %>%
-  arrange(Entity, Year)
-
-names(dataset_oil)[c(1,3)] = c("Region", "Oil")
-names(dataset_gas)[c(1,3)] = c("Region", "Gas")
-names(dataset_coal)[c(1,3)] = c("Region", "Coal")
-names(dataset_wind)[c(1,3)] = c("Region", "Wind")
-names(dataset_solar)[c(1,3)] = c("Region", "Solar")
-names(dataset_hydroelectric)[c(1,3)] = c("Region", "Hydroelectric")
-names(dataset_nuclear)[c(1,3)] = c("Region", "Nuclear")
+dataset_energy = full_join(dataset_oil, dataset_gas, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_coal, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_wind, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_solar, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_hydroelectric, by = c("Region", "Year"))
+dataset_energy = full_join(dataset_energy, dataset_nuclear, by = c("Region", "Year")) %>%
+  replace(is.na(.), 0) %>%
+  mutate(FossilFuels = Oil + Gas + Coal, Renewables = Wind + Solar + Hydroelectric + Nuclear) %>%
+  select(Region, Year, FossilFuels, Renewables) %>%
+  arrange(Region, Year)
 
 
 
@@ -149,98 +144,114 @@ dataset_gdp = dataset_gdp %>%
 
 
 
-dataset_countries = paste(wd, "/Countries.csv", sep = "") %>% read_csv() %>% as_tibble() %>%
-  select(1)
-
-dataset_countries[nrow(dataset_countries) + 1,] <- "World"
-
-names(dataset_countries)[1] = "Region"
-
-dataset_countries = inner_join(dataset_countries, dataset_oil, by = "Region") %>% select(1) %>% distinct()
-dataset_countries = inner_join(dataset_countries, dataset_life, by = "Region") %>% select(1) %>% distinct()
-dataset_countries = inner_join(dataset_countries, dataset_emissions, by = "Region") %>% select(1) %>% distinct()
-dataset_countries = inner_join(dataset_countries, dataset_population, by = "Region") %>% select(1) %>% distinct()
-dataset_countries = inner_join(dataset_countries, dataset_gdp, by = "Region") %>% select(1) %>% distinct()
-
-
-
-dataset_energy = full_join(dataset_oil, dataset_gas, by = c("Region", "Year"))
-dataset_energy = full_join(dataset_energy, dataset_coal, by = c("Region", "Year"))
-dataset_energy = full_join(dataset_energy, dataset_wind, by = c("Region", "Year"))
-dataset_energy = full_join(dataset_energy, dataset_solar, by = c("Region", "Year"))
-dataset_energy = full_join(dataset_energy, dataset_hydroelectric, by = c("Region", "Year"))
-dataset_energy = full_join(dataset_energy, dataset_nuclear, by = c("Region", "Year")) %>%
-  replace(is.na(.), 0) %>%
-  mutate(FossilFuels = Oil + Gas + Coal, Renewables = Wind + Solar + Hydroelectric + Nuclear) %>%
-  select(Region, Year, FossilFuels, Renewables)
-```
-
-## CO2 emissions
-
-CO2 emissions, fossil fuels' usage, GDP per capita and life expectancy are deeply linked
-
-```{r, evaluate = TRUE, echo = FALSE}
-#install.packages("patchwork")
-#install.packages("ggrepel")
-library(ggplot2)
-library(ggrepel)
-library(patchwork)
-
 mytheme = list(
     theme_classic() +
         theme(panel.background = element_blank(),
-              strip.background = element_rect(colour=NA, fill=NA),
-              panel.border = element_rect(fill = NA, color = "black"),
-              strip.text = element_text(face="bold", size = 9),
-              axis.text=element_text(face="bold"),
-              axis.title = element_text(face="bold"),
-              plot.title = element_text(face = "bold", hjust = 0.5,size = 13),
-              panel.grid.major = element_line(color = 'lightgrey', size = 0.25),
-              panel.grid.minor = element_line(color = 'lightgrey', size = 0.25))
+              panel.border = element_rect(fill = NA, color = "#000000"),
+              strip.background = element_rect(color = NA, fill = NA),
+              strip.text = element_text(face = "bold", size = 12),
+              axis.text = element_text(face = "bold", size = 10),
+              axis.title = element_text(face = "bold", size = 12),
+              plot.title = element_text(face = "bold", hjust = 0.5, size = 12),
+              panel.grid.major = element_line(color = '#CCCCCC', size = 0.25),
+              panel.grid.minor = element_line(color = '#CCCCCC', size = 0.25))
 )
+```
 
+## The deep relation between fossil fuels' usage and CO2 emissions{.smaller}
+
+```{r, evaluate = TRUE, echo = FALSE, fig.dim = c(8, 3)}
+dataset_emissions_per_capita = inner_join(dataset_emissions, dataset_population, by = c("Region", "Year")) %>%
+  mutate(CO2EmissionsPerCapita = CO2Emissions / Population) %>%
+  select(Region, Year, CO2EmissionsPerCapita)
+
+dataset_energy_per_capita = inner_join(dataset_energy, dataset_population, by = c("Region", "Year")) %>%
+  mutate(FossilFuelsPerCapita = FossilFuels / Population, RenewablesPerCapita = Renewables / Population) %>%
+  select(Region, Year, FossilFuelsPerCapita, RenewablesPerCapita)
+
+plot_energy_per_capita = ggplot() +
+  geom_line(data = dataset_energy_per_capita %>% filter(Region != "World"), mapping = aes(x = Year, y = FossilFuelsPerCapita, group = Region), size = 1, color = "#FFC896", alpha = 0.2) +
+  geom_line(data = dataset_energy_per_capita %>% filter(Region == "World"), mapping = aes(x = Year, y = FossilFuelsPerCapita), size = 1.5, color = "#80644B") +
+  labs(title = "Fossil fuels' energy output per capita\nfor each country and globally", x = "Year", y = "Energy output (TWh)") +
+  mytheme
+
+plot_emissions_per_capita = ggplot() +
+  geom_line(data = dataset_emissions_per_capita %>% filter(Region != "World"), mapping = aes(x = Year, y = CO2EmissionsPerCapita, group = Region), size = 1, color = "#FFC896", alpha = 0.2) +
+  geom_line(data = dataset_emissions_per_capita %>% filter(Region == "World"), mapping = aes(x = Year, y = CO2EmissionsPerCapita), size = 1.5, color = "#80644B") +
+  labs(title = "CO2 emissions per capita\nfor each country and globally", x = "Year", y = "CO2 emissions (T)") +
+  mytheme +
+  scale_y_continuous(position = "right")
+
+plot_energy_per_capita + plot_emissions_per_capita
+```
+
+Fossil fuels' usage and CO2 emissions not only both increased in the last decades, but they also grew following the same pattern.
+
+Globally, fossil fuels' usage has gone from 1.5e-5TWh to 1.7e-5TWh per capita, while CO2 emissions have gone from 4.1T to 4.5T per capita, a slight worsening that, multiplied by the increasing population, turns into a much more serious deal.
+
+## The deep relation between fossil fuels' usage and GDP per capita{.smaller}
+
+```{r, evaluate = TRUE, echo = FALSE, fig.dim = c(8, 3)}
 dataset_gdp_per_capita = inner_join(dataset_gdp, dataset_population, by = c("Region", "Year")) %>%
   mutate(GDPPerCapita = GDP / Population) %>%
   select(Region, Year, GDPPerCapita)
 
-plot_emissions = ggplot() +
-  geom_line(data = dataset_emissions %>% filter(Region != "World"), mapping = aes(x = Year, y = CO2Emissions, group = Region), size = 1, color = "#FFC896", alpha = 0.2) +
-  geom_line(data = dataset_emissions %>% filter(Region == "World"), mapping = aes(x = Year, y = CO2Emissions), size = 1.5, color = "#80644B") +
-  labs(title="Global CO2 emissions", x ="Year", y = "CO2 emissions (T)") +
-  mytheme
-
-plot_energy = ggplot() +
-  geom_line(data = dataset_energy %>% filter(Region != "World"), mapping = aes(x = Year, y = FossilFuels, group = Region), size = 1, color = "#FFC896", alpha = 0.2) +
-  geom_line(data = dataset_energy %>% filter(Region == "World"), mapping = aes(x = Year, y = FossilFuels), size = 1.5, color = "#80644B") +
-  labs(title="Fossil fuels' energy output", x ="Year", y = "Energy output (TWh)") +
-  mytheme
-
 plot_gdp_per_capita = ggplot() +
   geom_line(data = dataset_gdp_per_capita %>% filter(Region != "World"), mapping = aes(x = Year, y = GDPPerCapita, group = Region), size = 1, color = "#FFC896", alpha = 0.2) +
   geom_line(data = dataset_gdp_per_capita %>% filter(Region == "World"), mapping = aes(x = Year, y = GDPPerCapita), size = 1.5, color = "#80644B") +
-  labs(title="Global average GDP per capita", x ="Year", y = "GDP per capita (USD)") +
+  labs(title = "GDP per capita for each\ncountry and globally", x = "Year", y = "GDP per capita (USD)") +
   mytheme
 
+plot_energy_per_capita + (plot_gdp_per_capita + scale_y_continuous(position = "right"))
+```
+
+The modern industry, whose development is associated to the GDP per capita trend, has grown in the same fashion as fossil fuels' usage, but in an amplified manner.
+
+Global GDP per capita has grown from 8214USD in 2000 to 17009USD per capita in 2020.
+
+## The deep relation between GDP per capita and life expectancy{.smaller}
+
+```{r, evaluate = TRUE, echo = FALSE, fig.dim = c(8, 3)}
 plot_life_expectancy = ggplot() +
   geom_line(data = dataset_life %>% filter(Region != "World"), mapping = aes(x = Year, y = LifeExpectancy, group = Region), size = 1, color = "#FFC896", alpha = 0.2) +
   geom_line(data = dataset_life %>% filter(Region == "World"), aes(x = Year, y = LifeExpectancy), size = 1.5, color = "#80644B") +
-  labs(title="Global average life expectancy", x ="Year", y = "Life expectancy (years)") +
+  labs(title = "Life expectancy for each\ncountry and globally", x = "Year", y = "Life expectancy (years)") +
+  mytheme +
+  scale_y_continuous(position = "right")
+
+plot_gdp_per_capita + plot_life_expectancy
+```
+
+Boosting industry activity improves quality of life, bringing life expectancy up from 67 to 72 years average globally, as industrial and scientific development bring solutions to humanity's troubles.
+
+Renewables will reduce pollution and CO2 emissions, further improving quality of life, but the replacement needs to be planned not to harm industry activity.
+
+## Public investments in renewables{.smaller}
+
+```{r, evaluate = TRUE, echo = FALSE, fig.dim = c(8, 3)}
+plot_gdp = ggplot() +
+  geom_rect(data = dataset_energy %>% filter(Region == "World"), aes(xmin = 2009, xmax = 2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
+  geom_bar(data = dataset_energy %>% filter(Region == "World"), mapping = aes(x = Year, y = Renewables), position = "dodge", stat = "identity", fill = "#005380", width = 0.5) +
+  labs(title = "Renewables' energy output globally", x = "Year", y = "Energy output (TWh)") +
   mytheme
 
-(plot_emissions + plot_energy) / (plot_gdp_per_capita + plot_life_expectancy)
+plot_absolute = ggplot() +
+  geom_rect(data = dataset_investments, aes(xmin = 2009, xmax = 2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
+  geom_bar(data = dataset_investments, mapping = aes(x = Year, y = Amount), position = "dodge", stat = "identity", fill = "#005380", width = 0.5) +
+  labs(title = "Public investments\nin renewables globally", x = "Year", y = "Investments (USD)") +
+  mytheme +
+  scale_y_continuous(position = "right")
+
+plot_gdp + plot_absolute
 ```
- 
-## CO2 emissions
 
-CO2 emissions, fossil fuels' usage, GDP per capita and life expectancy grow in the same fashion.
+Governments' interest in renewables rose in 2009 with a sudden increase in public investments. Since then renewables' employment has accelerated thanks to legal incentives.
 
-Life expectancy is linked to the GDP per capita, which in turn is linked to the use of fossil fuels', that emit more CO2.
+This commitment, however, faded a lot from 2018 forward, after a peak in 2017 of 30 billion USD globally, declined to 10 billion USD in 2020.
 
-## Investments
+## Performance of investments{.smaller}
 
-Investments in the field of renewables rose significantly in 2009, but are very limited proportionally to the available resources.
-
-```{r, evaluate = TRUE, echo = FALSE}
+```{r, evaluate = TRUE, echo = FALSE, fig.dim = c(8, 3)}
 dataset_efficiency = full_join(dataset_investments, dataset_energy %>% filter(Region == "World") %>% select(c(2,3,4)), by = "Year") %>%
   replace(is.na(.), 0) %>%
   group_by(Year) %>%
@@ -256,115 +267,124 @@ dataset_percentage = full_join(dataset_investments, dataset_gdp %>% filter(Regio
   arrange(Year)
 
 plot_efficiency = ggplot() +
-  geom_rect(data = dataset_efficiency, aes(xmin=2009, xmax=2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
-  geom_bar(data = dataset_efficiency, mapping = aes(x = Year, y = Efficiency), position="dodge", stat="identity", fill = "#005380", width = 0.5) +
-  labs(title="Ratio between renewables' energy\noutput and the amount of\ninvestments in renewables globally", x ="Year", y = "Ratio (TWh/USD)") +
+  geom_rect(data = dataset_efficiency, aes(xmin = 2009, xmax = 2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
+  geom_bar(data = dataset_efficiency, mapping = aes(x = Year, y = Efficiency), position = "dodge", stat = "identity", fill = "#005380", width = 0.5) +
+  labs(title = "Ratio between renewables' energy\noutput and the amount of\ninvestments in renewables globally", x = "Year", y = "Efficiency (TWh/USD)") +
   mytheme
 
 plot_percentage = ggplot() +
-  geom_rect(data = dataset_percentage, aes(xmin=2009, xmax=2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
-  geom_bar(data = dataset_percentage, mapping = aes(x = Year, y = Percentage), position="dodge", stat="identity", fill = "#005380", width = 0.5) +
-  labs(title="Investments in renewables as\npercentage of GDP globally", x ="Year", y = "Percentage (%)") +
-  mytheme
+  geom_rect(data = dataset_percentage, aes(xmin = 2009, xmax = 2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
+  geom_bar(data = dataset_percentage, mapping = aes(x = Year, y = Percentage), position = "dodge", stat = "identity", fill = "#005380", width = 0.5) +
+  labs(title = "Investments in renewables as\npercentage of GDP globally", x = "Year", y = "Percentage (%)") +
+  mytheme +
+  scale_y_continuous(position = "right")
 
-plot_gdp = ggplot() +
-  geom_rect(data = dataset_energy %>% filter(Region == "World"), aes(xmin=2009, xmax=2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
-  geom_bar(data = dataset_energy %>% filter(Region == "World"), mapping = aes(x = Year, y = Renewables), position="dodge", stat="identity", fill = "#005380", width = 0.5) +
-  labs(title="Global Renewables' energy output", x ="Year", y = "Energy output (TWh)") +
-  mytheme
-
-plot_absolute = ggplot() +
-  geom_rect(data = dataset_investments, aes(xmin=2009, xmax=2020, ymin = -Inf, ymax = Inf), fill = "#00A6FF", alpha = 0.02) +
-  geom_bar(data = dataset_investments, mapping = aes(x = Year, y = Amount), position="dodge", stat="identity", fill = "#005380", width = 0.5) +
-  labs(title="Investments in renewables\nglobally", x ="Year", y = "Investments (USD)") +
-  mytheme
-
-(plot_efficiency + plot_percentage) / (plot_gdp + plot_absolute)
+plot_efficiency + plot_percentage
 ```
 
-## Investments
+The high starting efficiency (a relative measure not meant to be read with absolute units) up to 2008 is due to the low funding. The middle part from 2009 to 2017 is shallow and uniform because of constant funding, while from 2018 it has grown again, because of long lead times from previous investments and their subsequent decrease.
 
-After 2009, no significant increase in renewables' employment given the investments.
+With respect to the global GDP, public investments before 2009 went from 0.0025% to 0.005%, they peaked in 2012 at 0.025% and then declined to 0.0075% in 2020.
 
-The high start in efficiency is due to the almost absent investments.
+## Renewables' share in total energy supply{.smaller}
 
-The high end in efficiency is due to the simultaneous decrease in investments and increase in renewables' usage.
-
-Average investments' amounts peak at 0.025% of GDP, corresponding to about 30 billion USD globally.
-
-## Renewables
-
-Renewables' usage has grown in the last decades
-
-```{r, evaluate = TRUE, echo = FALSE}
+```{r, evaluate = TRUE, echo = FALSE, fig.dim = c(8, 3)}
 dataset_percentage = dataset_energy %>%
   mutate(Percentage = 100 * Renewables / (Renewables + FossilFuels)) %>%
   select(Region, Year, Percentage)
 
 dataset_renewables_to_population = inner_join(dataset_energy, dataset_population, by = c("Region", "Year")) %>%
-  mutate(Amount = Renewables / Population)
+  mutate(RenewablesPerCapita = Renewables / Population)
 
 plot_renewables_percentage = ggplot() +
   geom_jitter(data = dataset_percentage %>% filter(Region != "World"), aes(x = Year, y = Percentage, group = Year), position=position_jitter(0.1), color = "#FF8F8C") +
   geom_boxplot(data = dataset_percentage %>% filter(Region != "World"), aes(x = Year, y = Percentage, group = Year), fill = "#FF8F8C") +
-  labs(title="Renewables' percentage on all\nenergy sources for all countries", x ="Year", y = "Percentage (%)") +
+  labs(title = "Renewables' percentage on all\nenergy sources for all countries", x = "Year", y = "Percentage (%)") +
   mytheme
 
 plot_renewables_to_population = ggplot() +
-  geom_jitter(data = dataset_renewables_to_population %>% filter(Region != "World"), aes(x = Year, y = Amount, group = Year), position=position_jitter(0.1), color = "#FF8F8C") +
-  geom_boxplot(data = dataset_renewables_to_population %>% filter(Region != "World"), aes(x = Year, y = Amount, group = Year), fill = "#FF8F8C") +
-  labs(title="Renewable energy at disposal for\nevery citizen for all countries", x ="Year", y = "Renewable energy (TWh/person)") +
-  mytheme
+  geom_jitter(data = dataset_renewables_to_population %>% filter(Region != "World"), aes(x = Year, y = RenewablesPerCapita, group = Year), position = position_jitter(0.1), color = "#FF8F8C") +
+  geom_boxplot(data = dataset_renewables_to_population %>% filter(Region != "World"), aes(x = Year, y = RenewablesPerCapita, group = Year), fill = "#FF8F8C") +
+  labs(title = "Renewable energy output per\ncapita for all countries", x = "Year", y = "Energy output (TWh/person)") +
+  mytheme +
+  scale_y_continuous(position = "right")
 
 plot_renewables_percentage + plot_renewables_to_population
 ```
 
-## Renewables
+Taking into consideration the great variability from country to country, in 2000 14% of the total energy output was renewable, with 2.5e-6TWh produced per capita. This percentage fell down to 13% in 2009 (the amount of renewable energy produced per capita remained the same) and then, thanks to more involved governments, it grew up again reaching 16% in 2020, with an increased 3.1e-6TWh produced per capita.
 
-Renewables' usage has grown to around 15% at the current time.
+## Forecast on renewables' share in the future{.smaller}
 
-The amount of renewable energy each citizen in the world has access to has increased proportionally.
+```{r, evaluate = TRUE, echo = FALSE, fig.dim = c(8, 3)}
+renewables_percentage_cubic = lm(formula = Percentage ~ poly(Year, 3), data = filter(dataset_percentage, Region == "World" & Year >= 2000))
+renewables_per_capita_cubic = lm(formula = RenewablesPerCapita ~ poly(Year, 3), data = filter(dataset_renewables_to_population, Region == "World" & Year >= 2000))
 
-## Renewables
+Year = c(2021)
+Percentage = c(predict(renewables_percentage_cubic, newdata = data.frame(Year = 2021)))
+RenewablesPerCapita = c(predict(renewables_per_capita_cubic, newdata = data.frame(Year = 2021)))
+y = 2022
 
-```{r, evaluate = TRUE, echo = FALSE}
+while (Percentage[length(Percentage)] < 50) {
+  Year = c(Year, y)
+  Percentage = c(Percentage, predict(renewables_percentage_cubic, newdata = data.frame(Year = y)))
+  RenewablesPerCapita = c(RenewablesPerCapita, predict(renewables_per_capita_cubic, newdata = data.frame(Year = y)))
+  y = y + 1
+}
+
+renewables_percentage_cubic = data.frame(Year, Percentage)
+renewables_per_capita_cubic = data.frame(Year, RenewablesPerCapita)
+
 plot_renewables_percentage_forecast = ggplot() +
-  geom_vline(xintercept = 2020, linetype="dashed", color = "#000000", size = 1) +
-  geom_vline(xintercept = 2009, linetype="dashed", color = "#000000", size = 1) +
-  geom_text(aes(x=2007, label="Start of investments", y=22), colour="#000000", angle = 90) +
-  geom_text(aes(x=2018, label="Current time", y = 22), colour="#000000", angle = 90) +
-  geom_smooth(data = dataset_percentage %>% filter(Region == "World" & Year >= 2009), aes(x = Year, y = Percentage), color = "#000000", method = "lm", formula = y ~ poly(x, 3), se=FALSE, size = 1, fullrange=TRUE) +
-  geom_smooth(data = dataset_percentage %>% filter(Region == "World" & Year >= 2009), aes(x = Year, y = Percentage), color = "#000000", method = "lm", se=FALSE, size = 1, fullrange=TRUE) +
+  geom_vline(xintercept = 2020, linetype = "dashed", color = "#000000", size = 1) +
+  geom_vline(xintercept = 2009, linetype = "dashed", color = "#000000", size = 1) +
+  geom_text(aes(x=2007, label = "Start of public coverage", y = 32.5), color = "#000000", angle = 90) +
+  geom_text(aes(x=2018, label = "Today", y = 32.5), color = "#000000", angle = 90) +
+  geom_point(data = renewables_percentage_cubic, aes(x = Year, y = Percentage), color = "#000000", size = 1.5) +
   geom_point(data = dataset_percentage %>% filter(Region == "World"), aes(x = Year, y = Percentage), color = "#FF8F8C", size = 1.5) +
-  expand_limits(x = 2030) +
-  labs(title="Renewables' percentage\non all energy sources globally", x ="Year", y = "Percentage (%)") +
+  labs(title = "Renewables' percentage\non all energy sources globally", x = "Year", y = "Percentage (%)") +
   mytheme
 
-plot_renewables_to_population_forecast = ggplot() +
-  geom_vline(xintercept = 2020, linetype="dashed", color = "#000000", size = 1) +
-  geom_vline(xintercept = 2009, linetype="dashed", color = "#000000", size = 1) +
-  geom_text(aes(x=2007, label="Start of investments", y=0.000004), colour="#000000", angle = 90) +
-  geom_text(aes(x=2018, label="Current time", y=0.000004), colour="#000000", angle = 90) +
-  geom_smooth(data = dataset_renewables_to_population %>% filter(Region == "World" & Year >= 2009), aes(x = Year, y = Amount), color = "#000000", method = "lm", formula = y ~ poly(x, 3), se=FALSE, size = 1, fullrange=TRUE) +
-  geom_smooth(data = dataset_renewables_to_population %>% filter(Region == "World" & Year >= 2009), aes(x = Year, y = Amount), color = "#000000", method = "lm", se=FALSE, size = 1, fullrange=TRUE) +
-  geom_point(data = dataset_renewables_to_population %>% filter(Region == "World"), aes(x = Year, y = Amount), color = "#FF8F8C", size = 1.5) +
-  expand_limits(x = 2030) +
-  labs(title="Renewable energy at disposal\nfor every citizen globally", x ="Year", y = "Renewable energy (TWh/person)") +
-  mytheme
+plot_renewables_per_capita_forecast = ggplot() +
+  geom_vline(xintercept = 2020, linetype = "dashed", color = "#000000", size = 1) +
+  geom_vline(xintercept = 2009, linetype = "dashed", color = "#000000", size = 1) +
+  geom_text(aes(x=2007, label = "Start of public coverage", y = 6.5e-6), colour = "#000000", angle = 90) +
+  geom_text(aes(x=2018, label = "Today", y = 6.5e-6), colour = "#000000", angle = 90) +
+  geom_point(data = renewables_per_capita_cubic, aes(x = Year, y = RenewablesPerCapita), color = "#000000", size = 1.5) +
+  geom_point(data = dataset_renewables_to_population %>% filter(Region == "World"), aes(x = Year, y = RenewablesPerCapita), color = "#FF8F8C", size = 1.5) +
+  labs(title = "Renewable energy\noutput per capita globally", x = "Year", y = "Energy output (TWh/person)") +
+  mytheme +
+  scale_y_continuous(position = "right")
 
-plot_renewables_percentage_forecast + plot_renewables_to_population_forecast
+plot_renewables_percentage_forecast + plot_renewables_per_capita_forecast
 ```
 
-## Renewables
+Following the global trend outlined in the previous plot, renewables' production is projected to surpass fossil fuels' by 2041 according to a cubic regression (RSE 0.18) with a production of 9.9e-6TWh per capita.
 
-Starting from 2009, the starting year of investments, the percentage of renewable energy sources is projected to reach 25% in 10 to 40 years, depending on the regression analysis.
+## Conclusions{.smaller}
 
-In the same period, the amount of renewable energy each citizen has access to will grow comparably.
+1. Renewable energy sources will undoubtedly improve quality of life thanks to reduced emissions and pollution. However, quality of life is nowadays deeply connected to the activity of the industrial complex, which is in turn related to fossil energy sources. Thus, forcing a transition before increasing investments in renewables (but also in infrastructures for energy delivery) will result in an abrupt loss in life expectancy. An example could be the forcing of an all electric vehicles' market by 2035 in EU without deploying energy facilities in enough volume and capacity or enough charging stations to support the whole fleet. It is unthinkable to force such a transition without building the adequate infrastructure first.
+2. Government support to renewawbles' research and implementation through public investments is a tiny part of the related finance. A massive increase in government support (even 100 fold) is required not only with actual economic assistance to the businesses, but also in the form of alleviating the bureaucratic procedures that prevents accessible renewables' adoption, which would be made more convenient.
+3. Since the increase of public investments we've seen an increase of about 3% in renewables usage on all energy sources. This given, and in light of the late decrease in investments, if governments don't keep their involvement with incentives and structural allowance expectations might be further delayed.
 
-## Conclusions
+## Links{.smaller}
 
-In conclusion:
+Energy sources
 
-1. Quality of life is deeply connected to the activity of the industrial complex. Thus, abrupt cuts in energy production from fossil fuels will result in a loss in life expectancy. This has to be kept in mind before planning any transition to renewables.
-2. An increase in investments in renewables, even up to 100 fold, is required, but a subsequent effective employment of said energy sources is required even more
-3. Since the start of investments we've seen an increase of about 3% in renewwables usage among all energy sources. This is the result of past investments that need to be increased, otherwise, given the late decrease, we might delay the expectations a lot.
+https://ourworldindata.org/energy
+
+Investments
+
+https://www.irena.org/Data/View-data-by-topic/Finance-and-Investment/Renewable-Energy-Finance-Flows
+
+CO2 emissions
+
+https://ourworldindata.org/co2-dataset-sources
+
+GDP
+
+https://www.imf.org/external/datamapper/NGDP_RPCH@WEO/OEMDC/ADVEC/WEOWORLD
+
+Population
+
+https://ourworldindata.org/grapher/population
